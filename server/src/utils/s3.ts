@@ -9,6 +9,7 @@ export function createS3Client(env: Env): AwsClient {
         accessKeyId,
         secretAccessKey,
         service: "s3",
+        region: env.S3_REGION || "auto",
     });
 }
 
