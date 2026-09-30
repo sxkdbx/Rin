@@ -101,6 +101,23 @@ export function buildWranglerTriggersConfig(preview = false) {
       `);
 }
 
+// Only explicitly provided (non-empty) values are written into [vars], so a
+// deploy never overwrites a dashboard-set variable with an empty string.
+// Combined with `wrangler deploy --keep-vars`, variables managed in the
+// Cloudflare dashboard survive deployments untouched.
+export function buildWranglerVarsConfig(vars: Record<string, string | undefined>) {
+  const entries = Object.entries(vars).filter(([, value]) => value !== undefined && value !== "");
+  if (entries.length === 0) {
+    return "";
+  }
+
+  const lines = entries.map(([key, value]) => `${key} = "${value}"`).join("\n");
+  return stripIndent(`
+    [vars]
+    ${lines}
+  `);
+}
+
 export function buildWranglerQueueConfig(taskQueueName: string, preview = false) {
   return stripIndent(`
     [[queues.producers]]
@@ -154,19 +171,10 @@ export async function runCloudflareDeploy(target: "all" | "server" | "client" = 
   const s3Endpoint = env("S3_ENDPOINT", "");
   const s3AccessHost = env("S3_ACCESS_HOST", "");
   const s3Bucket = env("S3_BUCKET", "");
-  const s3CacheFolder = renv("S3_CACHE_FOLDER", "cache/");
-  const s3Folder = renv("S3_FOLDER", "images/");
-  const s3Region = renv("S3_REGION", "auto");
-  const s3ForcePathStyle = env("S3_FORCE_PATH_STYLE", "false");
   const webhookUrl = env("WEBHOOK_URL", "");
   const rssTitle = env("RSS_TITLE", "");
   const rssDescription = env("RSS_DESCRIPTION", "");
-  const cacheStorageMode = env("CACHE_STORAGE_MODE", "s3");
-  const name = env("NAME", "Rin");
-  const description = env("DESCRIPTION", "A lightweight personal blogging system");
   const avatar = env("AVATAR", "");
-  const pageSize = env("PAGE_SIZE", "5");
-  const rssEnable = env("RSS_ENABLE", "false");
   const frontendUrl = env("FRONTEND_URL", "");
 
   let finalS3Endpoint = s3Endpoint;
@@ -203,24 +211,25 @@ export async function runCloudflareDeploy(target: "all" | "server" | "client" = 
       ${buildWranglerTriggersConfig(preview)}
       ${buildWranglerObservabilityConfig(preview)}
 
-      [vars]
-      S3_FOLDER = "${s3Folder}"
-      S3_CACHE_FOLDER="${s3CacheFolder}"
-      S3_REGION = "${s3Region}"
-      S3_ENDPOINT = "${finalS3Endpoint}"
-      S3_ACCESS_HOST = "${finalS3AccessHost}"
-      S3_BUCKET = "${finalS3Bucket}"
-      S3_FORCE_PATH_STYLE = "${s3ForcePathStyle}"
-      WEBHOOK_URL = "${webhookUrl}"
-      RSS_TITLE = "${rssTitle}"
-      RSS_DESCRIPTION = "${rssDescription}"
-      CACHE_STORAGE_MODE = "${cacheStorageMode}"
-      NAME = "${name}"
-      DESCRIPTION = "${description}"
-      AVATAR = "${avatar}"
-      PAGE_SIZE = "${pageSize}"
-      RSS_ENABLE = "${rssEnable}"
-      FRONTEND_URL = "${frontendUrl}"
+      ${buildWranglerVarsConfig({
+        S3_FOLDER: env("S3_FOLDER"),
+        S3_CACHE_FOLDER: env("S3_CACHE_FOLDER"),
+        S3_REGION: env("S3_REGION"),
+        S3_ENDPOINT: finalS3Endpoint,
+        S3_ACCESS_HOST: finalS3AccessHost,
+        S3_BUCKET: finalS3Bucket,
+        S3_FORCE_PATH_STYLE: env("S3_FORCE_PATH_STYLE"),
+        WEBHOOK_URL: webhookUrl,
+        RSS_TITLE: rssTitle,
+        RSS_DESCRIPTION: rssDescription,
+        CACHE_STORAGE_MODE: env("CACHE_STORAGE_MODE"),
+        NAME: env("NAME"),
+        DESCRIPTION: env("DESCRIPTION"),
+        AVATAR: avatar,
+        PAGE_SIZE: env("PAGE_SIZE"),
+        RSS_ENABLE: env("RSS_ENABLE"),
+        FRONTEND_URL: frontendUrl,
+      })}
 
       [placement]
       mode = "smart"
@@ -296,11 +305,11 @@ export async function runCloudflareDeploy(target: "all" | "server" | "client" = 
     }
   }
   if (target === "server") {
-    await $`${bunExec} x wrangler deploy`;
+    await $`${bunExec} x wrangler deploy --keep-vars`;
     await syncWorkerSecrets(workerName);
     return;
   }
 
-  await $`${bunExec} x wrangler deploy`;
+  await $`${bunExec} x wrangler deploy --keep-vars`;
   await syncWorkerSecrets(workerName);
 }

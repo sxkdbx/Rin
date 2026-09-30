@@ -3,8 +3,31 @@ import {
   buildWranglerObservabilityConfig,
   buildWranglerQueueConfig,
   buildWranglerTriggersConfig,
+  buildWranglerVarsConfig,
   collectWorkerSecrets,
 } from "./deploy-cf";
+
+describe("buildWranglerVarsConfig", () => {
+  it("includes only explicitly provided non-empty vars", () => {
+    const config = buildWranglerVarsConfig({
+      S3_ENDPOINT: "https://s3.example.com",
+      S3_BUCKET: "bucket",
+      WEBHOOK_URL: "",
+      NAME: undefined,
+    });
+
+    expect(config).toContain("[vars]");
+    expect(config).toContain('S3_ENDPOINT = "https://s3.example.com"');
+    expect(config).toContain('S3_BUCKET = "bucket"');
+    expect(config).not.toContain("WEBHOOK_URL");
+    expect(config).not.toContain("NAME");
+  });
+
+  it("returns empty string when no vars are provided", () => {
+    expect(buildWranglerVarsConfig({ WEBHOOK_URL: "", NAME: undefined })).toBe("");
+    expect(buildWranglerVarsConfig({})).toBe("");
+  });
+});
 
 describe("collectWorkerSecrets", () => {
   it("includes supported non-empty worker secrets", () => {
