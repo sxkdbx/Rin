@@ -52,6 +52,22 @@ export async function putObject(
     return response;
 }
 
+export async function deleteObject(
+    client: AwsClient,
+    env: Env,
+    key: string
+) {
+    const response = await client.fetch(buildS3ObjectUrl(env, key), {
+        method: "DELETE",
+    });
+
+    if (!response.ok && response.status !== 404) {
+        throw new Error(`Failed to delete from S3: ${response.status} ${response.statusText}`);
+    }
+
+    return response;
+}
+
 export function buildS3ObjectUrl(env: Env, key: string): string {
     const endpoint = env.S3_ENDPOINT;
     const bucket = env.S3_BUCKET;

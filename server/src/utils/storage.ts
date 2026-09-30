@@ -1,5 +1,5 @@
 import { path_join } from "./path";
-import { buildS3ObjectUrl, createS3Client, putObject as putS3Object } from "./s3";
+import { buildS3ObjectUrl, createS3Client, deleteObject as deleteS3Object, putObject as putS3Object } from "./s3";
 
 type StorageTarget =
   | {
@@ -171,6 +171,17 @@ export async function putStorageObject(
   const storageKey = path_join(target.folder, key);
 
   return putStorageObjectAtKey(env, storageKey, body, contentType, baseUrl);
+}
+
+export async function deleteStorageObjectAtKey(env: Env, storageKey: string) {
+  if (env.R2_BUCKET) {
+    await env.R2_BUCKET.delete(storageKey);
+  } else {
+    const client = createS3Client(env);
+    await deleteS3Object(client, env, storageKey);
+  }
+
+  return { key: storageKey };
 }
 
 export async function putStorageObjectAtKey(

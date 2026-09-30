@@ -6,7 +6,8 @@ import Loading from 'react-loading';
 import { FlatInset, FlatTabButton } from "@rin/ui";
 import { useAlert } from "./dialog";
 import { useColorMode } from "../utils/darkModeUtils";
-import { buildMarkdownImage, uploadImageFile } from "../utils/image-upload";
+import { buildMarkdownImage, extractImageUrls, uploadImageFile } from "../utils/image-upload";
+import { client } from "../app/runtime";
 import { Markdown } from "./markdown";
 
 
@@ -393,6 +394,52 @@ export function MarkdownEditor({ content, setContent, placeholder = "> Write you
       editor.setValue(content);
     }
   }, [content]);
+
+  /* -------- delete bucket objects for removed images -------- */
+
+  // Delay gives users a grace window for undo / cut-paste before the
+  // object is actually removed from the bucket; the server additionally
+  // skips deletion while any saved content still references the image.
+  const IMAGE_DELETE_DELAY_MS = 10000;
+  const deleteTimersRef = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+  const contentRef = useRef(content);
+
+  useEffect(() => {
+    const previousUrls = extractImageUrls(contentRef.current);
+    const currentUrls = new Set(extractImageUrls(content));
+    contentRef.current = content;
+
+    const timers = deleteTimersRef.current;
+    for (const [url, timer] of timers) {
+      if (currentUrls.has(url)) {
+        clearTimeout(timer);
+        timers.delete(url);
+      }
+    }
+
+    for (const url of previousUrls) {
+      if (currentUrls.has(url) || timers.has(url)) continue;
+      const timer = setTimeout(() => {
+        timers.delete(url);
+        void client.storage.delete(url);
+      }, IMAGE_DELETE_DELAY_MS);
+      timers.set(url, timer);
+    }
+  }, [content]);
+
+  useEffect(() => {
+    const timers = deleteTimersRef.current;
+    return () => {
+      const currentUrls = new Set(extractImageUrls(contentRef.current));
+      for (const [url, timer] of timers) {
+        clearTimeout(timer);
+        if (!currentUrls.has(url)) {
+          void client.storage.delete(url);
+        }
+      }
+      timers.clear();
+    };
+  }, []);
 
   /* ---------------- UI ---------------- */
 

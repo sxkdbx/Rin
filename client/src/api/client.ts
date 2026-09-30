@@ -572,6 +572,11 @@ class StorageAPI {
     
     return this.http.post<UploadResponse>("/api/storage", formData);
   }
+
+  // DELETE /api/storage?url=<image url or key>
+  async delete(url: string): Promise<ApiResponse<{ deleted: boolean; reason?: string }>> {
+    return this.http.delete<{ deleted: boolean; reason?: string }>(`/api/storage?url=${encodeURIComponent(url)}`);
+  }
 }
 
 /**

@@ -246,6 +246,23 @@ export async function enrichMarkdownImageMetadata(content: string): Promise<Mark
   };
 }
 
+export function extractImageUrls(content: string): string[] {
+  const urls: string[] = [];
+  const markdownPattern = /!\[(.*?)\]\((\S+?)(?:\s+"[^"]*")?\)/g;
+  const htmlPattern = /<img\b[^>]*?\bsrc=["']([^"']+)["'][^>]*?>/gi;
+
+  for (const match of content.matchAll(markdownPattern)) {
+    const src = stripImageUrlMetadata(match[2]);
+    if (src) urls.push(src);
+  }
+  for (const match of content.matchAll(htmlPattern)) {
+    const src = stripImageUrlMetadata(match[1]);
+    if (src) urls.push(src);
+  }
+
+  return [...new Set(urls)];
+}
+
 export async function uploadImageFile(file: File): Promise<UploadedImageResult> {
   const [uploadResult, metadataResult] = await Promise.allSettled([
     client.storage.upload(file, file.name),

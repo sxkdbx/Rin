@@ -274,6 +274,89 @@ describe('StorageService', () => {
         });
     });
 
+    describe('DELETE / - Delete object', () => {
+        function createR2DeleteEnv(deleteCalls: string[]) {
+            return createMockEnv({
+                R2_BUCKET: {
+                    delete: async (key: string) => {
+                        deleteCalls.push(key);
+                    },
+                } as unknown as R2Bucket,
+                S3_ACCESS_HOST: 'https://images.example.com' as any,
+                S3_ENDPOINT: '' as any,
+                S3_BUCKET: '' as any,
+                S3_ACCESS_KEY_ID: '',
+                S3_SECRET_ACCESS_KEY: '',
+            });
+        }
+
+        it('should require authentication', async () => {
+            const res = await app.request('/?url=https://images.example.com/images/abc.png', {
+                method: 'DELETE',
+            }, env);
+
+            expect(res.status).toBe(401);
+        });
+
+        it('should reject URLs that do not point to this site\'s storage', async () => {
+            const r2Env = createR2DeleteEnv([]);
+            const r2App = createAppWithEnv(r2Env, 1);
+
+            const res = await r2App.request('/?url=https://evil.example.com/abc.png', {
+                method: 'DELETE',
+            }, r2Env);
+
+            expect(res.status).toBe(400);
+        });
+
+        it('should delete an unreferenced object from the bucket', async () => {
+            const deleteCalls: string[] = [];
+            const r2Env = createR2DeleteEnv(deleteCalls);
+            const r2App = createAppWithEnv(r2Env, 1);
+
+            const res = await r2App.request('/?url=' + encodeURIComponent('https://images.example.com/images/deadbeef.png'), {
+                method: 'DELETE',
+            }, r2Env);
+
+            expect(res.status).toBe(200);
+            expect(await res.json() as any).toEqual({ deleted: true });
+            expect(deleteCalls).toEqual(['images/deadbeef.png']);
+        });
+
+        it('should skip deletion when the image is still referenced by a feed', async () => {
+            const deleteCalls: string[] = [];
+            const r2Env = createR2DeleteEnv(deleteCalls);
+            const r2App = createAppWithEnv(r2Env, 1);
+
+            sqlite.exec(`
+                INSERT INTO feeds (id, title, content, summary, listed, draft, uid, created_at, updated_at)
+                VALUES (1, 'post', '![x](https://images.example.com/images/deadbeef.png)', '', 1, 0, 1, 0, 0)
+            `);
+
+            const res = await r2App.request('/?url=' + encodeURIComponent('https://images.example.com/images/deadbeef.png'), {
+                method: 'DELETE',
+            }, r2Env);
+
+            expect(res.status).toBe(200);
+            expect(await res.json() as any).toEqual({ deleted: false, reason: 'referenced' });
+            expect(deleteCalls).toEqual([]);
+        });
+
+        it('should accept /api/blob URLs', async () => {
+            const deleteCalls: string[] = [];
+            const r2Env = createR2DeleteEnv(deleteCalls);
+            const r2App = createAppWithEnv(r2Env, 1);
+
+            const res = await r2App.request('/?url=' + encodeURIComponent('http://localhost/api/blob/images/cafe.png'), {
+                method: 'DELETE',
+            }, r2Env);
+
+            expect(res.status).toBe(200);
+            expect(await res.json() as any).toEqual({ deleted: true });
+            expect(deleteCalls).toEqual(['images/cafe.png']);
+        });
+    });
+
     describe('GET /blob/* - Stream file', () => {
         it('should stream an R2 object through the blob route', async () => {
             const r2Env = createMockEnv({
